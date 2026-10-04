@@ -1756,6 +1756,23 @@ static void *wow64_map_buffer( TEB *teb, struct buffer *buffer, GLenum target, G
     if (!buffer_vm_alloc( teb, buffer, length + (offset & 0xf) )) goto unmap;
     buffer->map_ptr = (char *)buffer->vm_ptr + (offset & 0xf);
     buffer->copy_length = (access & GL_MAP_WRITE_BIT) ? length : 0;
+    /* What a map may read is what it asked for. A write-only map never reads what
+     * was there before: with neither invalidate bit set the contents are still
+     * undefined until it writes, so copying the range in is work for nothing --
+     * and it is the expensive direction, because host_ptr is this driver's own
+     * mapping of GPU memory, which is slow to read. Ragnarok Online spent most of
+     * a core on exactly this.
+     *
+     * PR 52 removed it for write-only-with-explicit-flush maps; this is the same
+     * saving for every other write-only map, which is the rest of them. The copy
+     * back at unmap stays, and stays the whole range, because that part the
+     * program did define.
+     */
+    if ((access & GL_MAP_WRITE_BIT) && !(access & GL_MAP_READ_BIT))
+    {
+        TRACE( "write-only map, not copying the old contents in\n" );
+        return buffer->map_ptr;
+    }
     if (!(access & (GL_MAP_INVALIDATE_RANGE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT)))
     {
         static int once;
