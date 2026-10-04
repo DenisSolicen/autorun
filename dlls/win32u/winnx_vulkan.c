@@ -102,6 +102,23 @@ static VkResult nx_vulkan_surface_create( struct client_surface *client, const s
 
     TRACE( "hwnd %p, raw %u, instance %p\n", hwnd, client->raw, instance );
 
+    /* The screen's NWindow goes to one surface at a time, and it is a single
+     * global. Wine's ddraw creates a hidden window and builds a D3D device on
+     * it before the game hands SetCooperativeLevel its own window; under this
+     * model the hidden window takes the screen, lives as long as the device does,
+     * and the real window can never acquire it. SetCooperativeLevel then fails and
+     * the game dies on a NULL dereference. On X11 every HWND gets its own surface,
+     * which is why the same Wine code is harmless there.
+     *
+     * So a window that is not visible does not get a host surface at all. The
+     * hidden placeholder loses nothing by this, and the game's real window is
+     * free to take the screen. See autorunhq/autorun issue #35. */
+    if (!is_window_visible( hwnd ))
+    {
+        nx_log( "[NXVK] hwnd %p is not visible; refusing the screen for it", hwnd );
+        return VK_ERROR_NATIVE_WINDOW_IN_USE_KHR;
+    }
+
     if (!(info.window = wine_nx_gl_acquire_window()))
     {
         ERR( "hwnd %p: the screen already has an OpenGL or Vulkan surface\n", hwnd );
