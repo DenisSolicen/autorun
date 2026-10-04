@@ -8962,16 +8962,19 @@ static int horizon_server_handle_send_hardware_message( struct horizon_server_co
             if (y < desktop->cursor.clip.top) y = desktop->cursor.clip.top;
             if (x >= desktop->cursor.clip.right) x = desktop->cursor.clip.right - 1;
             if (y >= desktop->cursor.clip.bottom) y = desktop->cursor.clip.bottom - 1;
-            if (legacy)
-            {
-                desktop->cursor.x = x;
-                desktop->cursor.y = y;
-            }
-            else
-            {
-                x = desktop->cursor.x;
-                y = desktop->cursor.y;
-            }
+            /* The shared cursor follows the hardware whatever the program asked
+             * for. It used to be frozen when the program had taken the mouse as
+             * raw input with NOLEGACY, and that frozen value is what the server then
+             * hit-tests windows against, and what it hands back with the raw event.
+             * So the program was told where its cursor was by a number nothing was
+             * maintaining: it stayed wherever it was first seen, which is (0,0) until
+             * something moves it, and a program that then treated that as its own
+             * origin could not push the cursor up or left. DKII-DX does.
+             *
+             * Queuing WM_MOUSEMOVE is still only done for a legacy device, below.
+             * That part is the program's choice and stays. */
+            desktop->cursor.x = x;
+            desktop->cursor.y = y;
         }
         else
         {
