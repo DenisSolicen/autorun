@@ -3956,6 +3956,27 @@ int main( int argc, char **argv )
     log_line( "[CPU] %s", target_machine == IMAGE_FILE_MACHINE_ARM64 ? "Native ARM64" :
                          runtime_fex ? "FEX-2609" : "Box64" );
 #ifdef WINE_NX_AMD64
+    /* Worth saying out loud rather than starting it anyway.
+     *
+     * A 64-bit program needs the 64-bit translator. Without FEX there is none: the
+     * ARM64EC bridge that is left is not an x86-64 emulator, and Box64 is a 32-bit
+     * engine, so the program loads, its modules attach, and then it cannot run. The
+     * line above already says which engine was chosen, but it names Box64 for any
+     * non-ARM64 target when FEX is off, which reads as a working combination.
+     *
+     * Without this the program sits on a black screen for a minute and returns to the
+     * launcher, which reads as "the game failed" rather than as "the wrong engine was
+     * picked", and there is nothing in the log to tell the two apart.
+     *
+     * Found on hardware: four 64-bit programs (Keep Talking and Nobody Explodes, CloverPit,
+     * DR: Survivor, Rhythm Doctor) each loaded, reported "[CPU] Box64", and returned.
+     */
+    if (target_machine == IMAGE_FILE_MACHINE_AMD64 && !runtime_fex)
+    {
+        log_line( "[FAIL] this program is 64-bit and this runtime has no 64-bit engine: "
+                  "FEX is off, and Box64 is 32-bit only. Nothing can run it." );
+        return return_to_launcher();
+    }
     if (target_machine == IMAGE_FILE_MACHINE_AMD64)
     {
         void *start, *end;
