@@ -393,7 +393,27 @@ static void log_line( const char *fmt, ... )
         }
         pthread_mutex_unlock( &log_mutex );
     }
-    if (on_main && strncmp( line, "[SYSCALL]", 9 )) consoleUpdate( NULL );
+    /* A console update presents a frame, so doing one per line turns verbose
+     * tracing into a frame storm: the console takes the screen away from the
+     * program (a black screen), the threads that would draw it spend their time
+     * presenting instead of running it, and it stops answering HOME because it is
+     * never idle. Verbose is allowed to be slower and louder; it is not allowed to
+     * stop the program, which is what this used to do on any game that logs
+     * steadily. Throttle to a few a second and let the lines that say what
+     * happened through at once. */
+    if (on_main && strncmp( line, "[SYSCALL]", 9 ))
+    {
+        static uint64_t last_presented;
+        uint64_t now = armGetSystemTick();
+        int due = log_line_is_urgent( line ) || !last_presented ||
+                  armTicksToNs( now - last_presented ) >= 250000000ull;
+
+        if (due)
+        {
+            consoleUpdate( NULL );
+            last_presented = now;
+        }
+    }
 }
 
 /* A program's own log, kept from the moment it is about to start: everything
